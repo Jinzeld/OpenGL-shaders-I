@@ -175,6 +175,7 @@ int		ActiveButton;			// current button that is down
 GLuint	AxesList;				// list to hold the axes
 int		AxesOn;					// != 0 means to draw the axes
 GLuint	BoxList;				// object display list
+GLuint	SnakeList;             // display list for the loaded snake OBJ
 int		DebugOn;				// != 0 means to print debugging info
 int		DepthCueOn;				// != 0 means to use intensity depth cueing
 int		DepthBufferOn;			// != 0 means to use the z-buffer
@@ -298,11 +299,14 @@ TimeOfDaySeed( )
 //#include "osucube.cpp"
 //#include "osucylindercone.cpp"
 //#include "osutorus.cpp"
-//#include "bmptotexture.cpp"
-//#include "loadobjmtlfiles.cpp"
+//#include "bmptotexture.cpp
+#include "loadobjmtlfiles.h"
+#include "glslprogram.cpp"
 //#include "keytime.cpp"
-//#include "glslprogram.cpp"
 //#include "vertexbufferobject.cpp"
+
+// Create a GLSL program instance for the pig-in-the-python shader
+GLSLProgram PigProg;
 
 
 // main program:
@@ -356,15 +360,6 @@ main( int argc, char *argv[ ] )
 void
 Animate( )
 {
-	// put animation stuff in here -- change some global variables for Display( ) to find:
-
-	int ms = glutGet(GLUT_ELAPSED_TIME);
-	ms %= MS_PER_CYCLE;							// makes the value of ms between 0 and MS_PER_CYCLE-1
-	Time = (float)ms / (float)MS_PER_CYCLE;		// makes the value of Time between 0. and slightly less than 1.
-
-	// for example, if you wanted to spin an object in Display( ), you might call: glRotatef( 360.f*Time,   0., 1., 0. );
-
-	// force a call to Display( ) next time it is convenient:
 
 	glutSetWindow( MainWindow );
 	glutPostRedisplay( );
@@ -416,7 +411,7 @@ Display( )
 	if( NowProjection == ORTHO )
 		glOrtho( -2.f, 2.f,     -2.f, 2.f,     0.1f, 1000.f );
 	else
-		gluPerspective( 70.f, 1.f,	0.1f, 1000.f );
+		gluPerspective( 90.f, 1.f,	0.1f, 1000.f );
 
 	// place the objects into the scene:
 
@@ -425,7 +420,7 @@ Display( )
 
 	// set the eye position, look-at position, and up-vector:
 
-	gluLookAt( 0.f, 0.f, 3.f,     0.f, 0.f, 0.f,     0.f, 1.f, 0.f );
+	gluLookAt( 0.f, 0.f, 10.5f,     0.f, 0.f, 0.f,     0.f, 1.f, 0.f );
 
 	// rotate the scene:
 
@@ -450,7 +445,21 @@ Display( )
 
 	glEnable( GL_NORMALIZE );
 
-	//code
+	// --- Pig-in-the-Python rendering ---
+	float period = 6.f;
+	float t = fmodf( ElapsedSeconds(), period ) / period;
+	float uPigD_val = 9.f - t * ( 9.f + 13.f );
+	float uPigH_val = 4.0f * ( 0.5f + 0.5f * sinf( ElapsedSeconds() * 2.f * 3.14159265f / period ) );
+
+	PigProg.Use();
+	PigProg.SetUniformVariable( (char *)"uPigD", uPigD_val );
+	PigProg.SetUniformVariable( (char *)"uPigH", uPigH_val );
+	PigProg.SetUniformVariable( (char *)"uLightPos", 0.f, 10.f, 10.f );
+
+	glColor3f( 1.f, 1.f, 1.f );
+	glCallList( SnakeList );
+
+	PigProg.UnUse();
 
 	// swap the double-buffered framebuffers:
 
@@ -702,7 +711,17 @@ InitGraphics( )
 	fprintf( stderr, "Status: Using GLEW %s\n", glewGetString(GLEW_VERSION));
 #endif
 
-	// all other setups go here, such as GLSLProgram and KeyTime setups:
+	// GLSLProgram and KeyTime setups:
+
+	PigProg.Init();
+	if( !PigProg.Create( (char *)"PigInPython.vert", (char *)"PigInPython.frag" ) )
+	{
+		fprintf( stderr, "Failed to create PigInPython shader program.\n" );
+	}
+	else
+	{
+		PigProg.SetVerbose( false );
+	}
 
 }
 
@@ -723,6 +742,14 @@ void InitLists( ) {
         Axes(1.5);
         glLineWidth(1.);
     glEndList();
+
+	// Create a display list for the snake OBJ so we don't reload it every frame
+	SnakeList = glGenLists(1);
+	glNewList(SnakeList, GL_COMPILE);
+		
+		
+		LoadObjMtlFiles( (char *)"snakeH.obj" );
+	glEndList();
 }
 
 // initialize the glui window:
